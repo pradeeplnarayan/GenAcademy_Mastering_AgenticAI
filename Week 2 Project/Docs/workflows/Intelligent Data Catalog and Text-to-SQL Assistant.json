@@ -1,0 +1,864 @@
+{
+  "name": "Intelligent Data Catalog and Text-to-SQL Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "responseMode": "lastNode"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -1536,
+        -656
+      ],
+      "id": "b1668a18-b2a6-4399-b743-ee4e44e34597",
+      "name": "When chat message received",
+      "webhookId": "c6d9c7b8-0a15-442a-8390-a12dd6f6f16c"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d6242913-5cad-4e77-9da2-81da1b6fc2d4",
+              "name": "question",
+              "value": "={{ $json.chatInput }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1312,
+        -656
+      ],
+      "id": "a835bbee-e8cb-45c5-97d4-6789c0db8cdc",
+      "name": "Prepare Question"
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "adventureworks-catalog",
+          "mode": "list",
+          "cachedResultName": "adventureworks-catalog"
+        },
+        "prompt": "={{ $('Prepare Question').first().json.question }}",
+        "topK": 8,
+        "options": {
+          "pineconeNamespace": "adventureworks-v1"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        -1088,
+        -656
+      ],
+      "id": "3312fd26-d76e-45de-b56d-461fdc6bf2d5",
+      "name": "Search AdventureWorks Catalog",
+      "credentials": {
+        "pineconeApi": {
+          "id": "3pBJgS3iswnECkNv",
+          "name": "Pinecone AdventureWorks"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1088,
+        -464
+      ],
+      "id": "b744129d-e35b-4549-a945-613e1709d000",
+      "name": "OpenAI - RAG Project",
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "documents",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        -656
+      ],
+      "id": "f905e0bb-3fe0-48e4-b42e-19aae3f14968",
+      "name": "Aggregate Retrieved Documents"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d0b50a78-c0fa-46cf-8cad-49bbc360c9f2",
+              "name": "question",
+              "value": "={{ $('Prepare Question').first().json.question }}",
+              "type": "string"
+            },
+            {
+              "id": "1dc71ac9-cd54-4c98-b4e8-27b9f6f41a62",
+              "name": "context",
+              "value": "={{\n  $json.documents.map((result, index) =>\n    'SOURCE ' + (index + 1) + '\\n' +\n    'DOCUMENT_ID: ' + (result.document?.metadata?.document_id || 'unknown') + '\\n' +\n    'DOCUMENT_TYPE: ' + (result.document?.metadata?.document_type || 'unknown') + '\\n' +\n    'TABLE: ' + (result.document?.metadata?.qualified_table_name || '') + '\\n' +\n    'SIMILARITY SCORE: ' + (result.score ?? 'not provided') + '\\n' +\n    'CONTENT:\\n' + (result.document?.pageContent || '')\n  ).join('\\n\\n---\\n\\n')\n}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -512,
+        -656
+      ],
+      "id": "ddc24d10-7c5a-421f-a59c-5b9aeab05593",
+      "name": "Build Grounded Context"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -288,
+        -480
+      ],
+      "id": "24814125-7e18-4f3e-95fc-96feeeab2c78",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a schema-grounded Microsoft SQL Server Text-to-SQL generator for the AdventureWorksDW Internet Sales domain.\n\nGenerate a query using only the retrieved catalog context.\n\nRules:\n\n1. Use Microsoft SQL Server T-SQL.\n2. Use only tables, columns, relationships, and business definitions explicitly present in the retrieved context.\n3. Never invent a table, column, join, business definition, or calculation.\n4. Generate exactly one read-only query.\n5. The query must begin with SELECT or WITH.\n6. Never generate INSERT, UPDATE, DELETE, MERGE, DROP, ALTER, CREATE, TRUNCATE, EXEC, EXECUTE, GRANT, REVOKE, DENY, BACKUP, RESTORE, DBCC, USE, or dynamic SQL.\n7. Never use SELECT *.\n8. Use schema-qualified names such as dbo.FactInternetSales. Do not invent or include columns that are absent from the retrieved catalog.\n9. Use explicit JOIN conditions based only on documented relationships.\n10. Use OrderDateKey for sales-by-date analysis unless the user explicitly requests ship date or due date.\n11. Internet Sales Revenue means SUM(FactInternetSales.SalesAmount).\n12. Internet Order Count means COUNT(DISTINCT FactInternetSales.SalesOrderNumber).\n13. Gross Product Profit means SUM(SalesAmount - TotalProductCost).\n14. Do not include TaxAmt or Freight in revenue unless the user explicitly requests them.\n15. Use NULLIF when dividing to prevent division-by-zero errors.\n16. For nonaggregate detail queries, limit output using TOP (100).\n17. For ranking questions, use the number requested by the user, or TOP (10) when none is provided.\n18. Do not place Markdown code fences inside the sql field.\n19. Set status to \"ready\" only when the query is fully grounded.\n20. Set status to \"needs_clarification\" if the question is materially ambiguous.\n21. Set status to \"unsupported\" when the required schema or definition is absent.\n22. For needs_clarification or unsupported, return an empty sql string.\n23. Include every supporting catalog document ID in citations.\n24. State important interpretations in assumptions.\n\nUSER QUESTION:\n{{ $json.question }}\n\nRETRIEVED CATALOG CONTEXT:\n{{ $json.context }}\n\nReturn all six required fields exactly:\nstatus, answer, sql, tables_used, assumptions, citations.\nDo not omit a field. Use an empty array when an array has no values.\nCite only documents actually needed to support the query, normally 2 to 5 documents.\n\nAny request to insert, update, delete, merge, truncate, drop, alter, create,\nexecute, grant, revoke, deny, back up, restore, or otherwise modify data or\ndatabase objects must return status \"unsupported\" and an empty sql string.\n\nNever classify a destructive request as \"needs_clarification\".\nDo not ask questions that would help construct the destructive statement.\nYou may tell the user that they can submit a separate request for a read-only\nSELECT preview.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -288,
+        -656
+      ],
+      "id": "53e04249-e705-4c9a-9ddb-f600b72783b9",
+      "name": "Generate SQL Query"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"status\": \"ready\",\n  \"answer\": \"This query calculates Internet sales revenue by calendar year.\",\n  \"sql\": \"SELECT d.CalendarYear, SUM(fis.SalesAmount) AS InternetSalesRevenue FROM dbo.FactInternetSales AS fis INNER JOIN dbo.DimDate AS d ON d.DateKey = fis.OrderDateKey GROUP BY d.CalendarYear ORDER BY d.CalendarYear;\",\n  \"tables_used\": [\n    \"dbo.FactInternetSales\",\n    \"dbo.DimDate\"\n  ],\n  \"assumptions\": [\n    \"Sales refers to Internet Sales Revenue.\",\n    \"Calendar analysis uses OrderDateKey.\"\n  ],\n  \"citations\": [\n    \"table:dbo.FactInternetSales\",\n    \"table:dbo.DimDate\",\n    \"glossary:internet_sales_revenue\",\n    \"glossary:order_date\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -144,
+        -480
+      ],
+      "id": "04e64ca0-8a74-46df-987e-f3a20649d697",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1626bd62-9f53-490f-856c-88a4d9667395",
+              "leftValue": "={{ $json.execution_eligible }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        -656
+      ],
+      "id": "55c01aff-e2d7-450b-a582-9fc7e33727b6",
+      "name": "Is SQL Eligible for Execution?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6af0fdf8-7183-4ff9-8009-1f7f0721fe00",
+              "name": "output",
+              "value": "={{\n  $json.status === 'unsupported'\n    ? 'The request was blocked because this assistant only supports read-only SQL. No SQL was generated or executed.'\n    : $json.status === 'needs_clarification'\n      ? $json.answer\n      : 'The generated query was blocked by deterministic safety validation.' +\n        '\\n\\nReasons:\\n' +\n        ($json.validation_errors.length\n          ? $json.validation_errors.map(error => '- ' + error).join('\\n')\n          : '- The query is not eligible for execution.')\n}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        368,
+        -576
+      ],
+      "id": "fc56b2f8-2416-4ff6-9f03-de2209d59623",
+      "name": "Blocked Response"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.validated_sql}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        -736
+      ],
+      "id": "dc6f84e8-9e3d-40a1-b366-9bc8be6b60e2",
+      "name": "Microsoft SQL",
+      "alwaysOutputData": true,
+      "credentials": {
+        "microsoftSql": {
+          "id": "t7hoBybsO4Mm7M3V",
+          "name": "AdventureWorks-ReadOnly"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const rawRows = Array.isArray($json.rows)\n  ? $json.rows\n  : [];\n\n// Always Output Data may create one empty object for a zero-row result.\nconst rows = rawRows.filter(\n  row =>\n    row &&\n    typeof row === 'object' &&\n    Object.keys(row).length > 0\n);\n\n// Retrieve the validated information from the earlier safety node.\nconst validation =\n  $('Validate SQL Safety').first().json;\n\nconst sql = validation.validated_sql ?? '';\nconst assumptions = validation.assumptions ?? [];\nconst citations = validation.citations ?? [];\nconst referencedTables = validation.referenced_tables ?? [];\n\nconst maximumDisplayedRows = 20;\nconst maximumDisplayedColumns = 8;\n\nconst displayedRows = rows.slice(0, maximumDisplayedRows);\n\nfunction formatValue(value) {\n  if (value === null || value === undefined) {\n    return '';\n  }\n\n  if (typeof value === 'number') {\n    return Number.isFinite(value)\n      ? String(value)\n      : '';\n  }\n\n  if (typeof value === 'boolean') {\n    return value ? 'true' : 'false';\n  }\n\n  if (typeof value === 'object') {\n    return JSON.stringify(value);\n  }\n\n  return String(value);\n}\n\nfunction escapeMarkdownCell(value) {\n  return formatValue(value)\n    .replace(/\\|/g, '\\\\|')\n    .replace(/\\r?\\n/g, ' ')\n    .trim();\n}\n\nlet resultSection;\n\nif (displayedRows.length === 0) {\n  resultSection = 'No rows were returned.';\n} else {\n  const allColumns = [\n    ...new Set(\n      displayedRows.flatMap(row => Object.keys(row))\n    ),\n  ];\n\n  const displayedColumns =\n    allColumns.slice(0, maximumDisplayedColumns);\n\n  const header =\n    '| ' + displayedColumns.join(' | ') + ' |';\n\n  const divider =\n    '| ' + displayedColumns.map(() => '---').join(' | ') + ' |';\n\n  const body = displayedRows\n    .map(row =>\n      '| ' +\n      displayedColumns\n        .map(column => escapeMarkdownCell(row[column]))\n        .join(' | ') +\n      ' |'\n    )\n    .join('\\n');\n\n  const rowNotice =\n    rows.length > maximumDisplayedRows\n      ? `\\n\\nShowing ${maximumDisplayedRows} of ${rows.length} returned rows.`\n      : `\\n\\nReturned ${rows.length} row${rows.length === 1 ? '' : 's'}.`;\n\n  const columnNotice =\n    allColumns.length > maximumDisplayedColumns\n      ? ` Displaying ${maximumDisplayedColumns} of ${allColumns.length} columns.`\n      : '';\n\n  resultSection =\n    header +\n    '\\n' +\n    divider +\n    '\\n' +\n    body +\n    rowNotice +\n    columnNotice;\n}\n\nconst assumptionsSection =\n  assumptions.length > 0\n    ? assumptions.map(item => `- ${item}`).join('\\n')\n    : '- None';\n\nconst tableSection =\n  referencedTables.length > 0\n    ? referencedTables.map(table => `- ${table}`).join('\\n')\n    : '- None';\n\nconst citationSection =\n  citations.length > 0\n    ? citations.map(source => `- [${source}]`).join('\\n')\n    : '- None';\n\nconst output =\n  'Query executed successfully using the read-only AdventureWorksDW connection.' +\n  '\\n\\nSQL:\\n```sql\\n' +\n  sql +\n  '\\n```' +\n  '\\n\\nResults:\\n' +\n  resultSection +\n  '\\n\\nTables:\\n' +\n  tableSection +\n  '\\n\\nAssumptions:\\n' +\n  assumptionsSection +\n  '\\n\\nSources:\\n' +\n  citationSection;\n\nreturn {\n  json: {\n    output,\n    execution_status: 'success',\n    returned_row_count: rows.length,\n    displayed_row_count: Math.min(\n      rows.length,\n      maximumDisplayedRows\n    ),\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        -864
+      ],
+      "id": "1a460c5d-c2ac-4082-a7f9-c725ec9aff8d",
+      "name": "Format Query Results"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c63cbbd-8090-4148-ac4e-7e6505f58629",
+              "name": "output",
+              "value": "The validated query could not be executed against AdventureWorksDW. No data was modified. Review the workflow execution for diagnostic details.",
+              "type": "string"
+            },
+            {
+              "id": "4581e728-2a03-4bad-9d0e-e8755b98a8c5",
+              "name": "execution_status",
+              "value": "Error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        704,
+        -576
+      ],
+      "id": "16f80991-b28e-4e34-bb05-a6c9fd1086bf",
+      "name": "Format Execution Error"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "rows",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        688,
+        -864
+      ],
+      "id": "2be9d880-14ca-4025-9271-d60f0a230101",
+      "name": "All Item Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Accept common n8n output structures.\nconst generated =\n  $json.output ??\n  $json.parsed ??\n  $json;\n\nconst status = String(generated.status ?? '').trim().toLowerCase();\nconst sql = String(generated.sql ?? '').trim();\n\nconst validationErrors = [];\nconst validationChecks = {};\n\nfunction recordCheck(name, passed, failureMessage) {\n  validationChecks[name] = passed;\n\n  if (!passed) {\n    validationErrors.push(failureMessage);\n  }\n}\n\n// Mask characters inside SQL string literals before scanning for keywords.\n// Escaped single quotes such as '' are handled.\nfunction maskStringLiterals(input) {\n  let output = '';\n  let insideString = false;\n\n  for (let index = 0; index < input.length; index++) {\n    const character = input[index];\n\n    if (character === \"'\") {\n      if (insideString && input[index + 1] === \"'\") {\n        output += '  ';\n        index++;\n        continue;\n      }\n\n      insideString = !insideString;\n      output += ' ';\n      continue;\n    }\n\n    if (insideString) {\n      output += character === '\\n' ? '\\n' : ' ';\n    } else {\n      output += character;\n    }\n  }\n\n  return {\n    masked: output,\n    hasUnclosedString: insideString,\n  };\n}\n\nconst maskedResult = maskStringLiterals(sql);\nconst maskedSql = maskedResult.masked;\n\nconst normalizedSql = maskedSql\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .toUpperCase();\n\n// Internet Sales domain allowlist.\n// Physical table references must be schema-qualified as dbo.TableName.\nconst allowedTables = new Set([\n  'dbo.dimcurrency',\n  'dbo.dimcustomer',\n  'dbo.dimdate',\n  'dbo.dimgeography',\n  'dbo.dimproduct',\n  'dbo.dimproductcategory',\n  'dbo.dimproductsubcategory',\n  'dbo.dimpromotion',\n  'dbo.dimsalesterritory',\n  'dbo.factinternetsales',\n]);\n\n/*\n * Non-ready generation results are never eligible for execution.\n *\n * Examples:\n * - unsupported destructive request\n * - ambiguous request requiring clarification\n * - missing catalog information\n */\nif (status !== 'ready') {\n  recordCheck(\n    'non_ready_has_empty_sql',\n    sql.length === 0,\n    'A non-ready response unexpectedly contained SQL.'\n  );\n\n  return {\n    json: {\n      status,\n      answer: generated.answer ?? '',\n      sql,\n      tables_used: generated.tables_used ?? [],\n      assumptions: generated.assumptions ?? [],\n      citations: generated.citations ?? [],\n      validation_checks: validationChecks,\n      validation_errors: validationErrors,\n      referenced_tables: [],\n      safety_passed: false,\n      execution_eligible: false,\n      validated_sql: '',\n    },\n  };\n}\n\n/*\n * Checks below apply only when the model returned status = ready.\n */\n\n// SQL must be present.\nrecordCheck(\n  'sql_is_present',\n  sql.length > 0,\n  'The generated SQL is empty.'\n);\n\n// Prevent unexpectedly large generated statements.\nrecordCheck(\n  'sql_length_is_reasonable',\n  sql.length <= 10000,\n  'The generated SQL exceeds the 10,000-character safety limit.'\n);\n\n// Reject malformed or unfinished string literals.\nrecordCheck(\n  'string_literals_are_balanced',\n  !maskedResult.hasUnclosedString,\n  'The query contains an unclosed SQL string literal.'\n);\n\n// Permit one statement with an optional trailing semicolon.\nconst statements = maskedSql\n  .split(';')\n  .map(statement => statement.trim())\n  .filter(Boolean);\n\nrecordCheck(\n  'single_statement',\n  statements.length === 1,\n  'Only one SQL statement is allowed.'\n);\n\n// Queries must start with SELECT or WITH.\nrecordCheck(\n  'read_only_start',\n  /^(SELECT|WITH)\\b/i.test(sql),\n  'The query must begin with SELECT or WITH.'\n);\n\n// Reject comments because they can conceal appended SQL.\nrecordCheck(\n  'no_comments',\n  !/(--|\\/\\*|\\*\\/)/.test(maskedSql),\n  'SQL comments are not allowed.'\n);\n\n// Block data modification, DDL, administration, dynamic SQL,\n// external data access, and SELECT INTO.\nconst blockedKeywordPattern =\n  /\\b(INSERT|UPDATE|DELETE|MERGE|DROP|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE|DECLARE|SET|USE|GRANT|REVOKE|DENY|BACKUP|RESTORE|DBCC|SHUTDOWN|KILL|WAITFOR|BULK|INTO|OPENROWSET|OPENDATASOURCE|OPENQUERY|OPENXML)\\b/i;\n\nrecordCheck(\n  'no_blocked_keywords',\n  !blockedKeywordPattern.test(normalizedSql),\n  'The query contains a blocked SQL keyword.'\n);\n\n// Block calls to extended and system stored procedures.\nrecordCheck(\n  'no_extended_or_system_procedures',\n  !/\\b(XP_|SP_)/i.test(normalizedSql),\n  'Extended or system stored procedures are not allowed.'\n);\n\n// The assistant does not need SQL Server system metadata.\nrecordCheck(\n  'no_system_catalog_access',\n  !/\\b(INFORMATION_SCHEMA|SYS\\s*\\.)/i.test(normalizedSql),\n  'System catalog access is not allowed.'\n);\n\n// Reject SELECT * and alias.*.\nconst selectStarPattern =\n  /\\bSELECT\\s+(?:TOP\\s*(?:\\(\\s*\\d+\\s*\\)|\\d+)\\s+)?(?:DISTINCT\\s+)?(?:[A-Za-z_][\\w]*\\s*\\.\\s*)?\\*/i;\n\nrecordCheck(\n  'no_select_star',\n  !selectStarPattern.test(maskedSql),\n  'SELECT * and alias.* are not allowed.'\n);\n\n/*\n * Detect CTE names.\n *\n * A CTE may be referenced using only its one-part name.\n * Physical tables must still use schema.table.\n */\nconst cteNames = new Set();\n\nconst ctePattern =\n  /(?:\\bWITH|,)\\s*(\\[[^\\]]+\\]|[A-Za-z_][\\w$#@]*)\\s+AS\\s*\\(/gi;\n\nlet cteMatch;\n\nwhile ((cteMatch = ctePattern.exec(maskedSql)) !== null) {\n  const cteName = cteMatch[1]\n    .replace(/[\\[\\]]/g, '')\n    .toLowerCase();\n\n  cteNames.add(cteName);\n}\n\n/*\n * Extract identifiers following FROM and JOIN.\n *\n * Supported physical format:\n *   dbo.TableName\n *   [dbo].[TableName]\n *\n * One-part identifiers are allowed only for recognized CTEs.\n * Three-part and four-part identifiers are rejected.\n */\nconst tablePattern =\n  /\\b(?:FROM|JOIN)\\s+((?:\\[[^\\]]+\\]|[A-Za-z_][\\w$#@]*)(?:\\s*\\.\\s*(?:\\[[^\\]]+\\]|[A-Za-z_][\\w$#@]*)){0,3})/gi;\n\nconst referencedTables = [];\nconst invalidTableReferences = [];\n\nlet tableMatch;\n\nwhile ((tableMatch = tablePattern.exec(maskedSql)) !== null) {\n  const rawIdentifier = tableMatch[1];\n\n  const parts = rawIdentifier\n    .split('.')\n    .map(part =>\n      part\n        .replace(/[\\[\\]\\s]/g, '')\n        .toLowerCase()\n    )\n    .filter(Boolean);\n\n  // Allow one-part references only when they refer to a known CTE.\n  if (parts.length === 1 && cteNames.has(parts[0])) {\n    continue;\n  }\n\n  // Physical tables must use exactly schema.table.\n  if (parts.length !== 2) {\n    invalidTableReferences.push(rawIdentifier);\n    continue;\n  }\n\n  const normalizedTable = `${parts[0]}.${parts[1]}`;\n  referencedTables.push(normalizedTable);\n\n  if (!allowedTables.has(normalizedTable)) {\n    invalidTableReferences.push(rawIdentifier);\n  }\n}\n\nconst uniqueReferencedTables = [...new Set(referencedTables)];\n\nrecordCheck(\n  'references_physical_tables',\n  uniqueReferencedTables.length > 0,\n  'The validator could not identify an approved physical table.'\n);\n\nrecordCheck(\n  'tables_are_allowlisted',\n  invalidTableReferences.length === 0,\n  invalidTableReferences.length > 0\n    ? `Unapproved table references: ${[\n        ...new Set(invalidTableReferences),\n      ].join(', ')}`\n    : 'All physical tables are allowlisted.'\n);\n\n/*\n * Validate TOP.\n *\n * If TOP is present, it must be a fixed integer from 1 through 100.\n */\nconst topMatch = maskedSql.match(\n  /\\bTOP\\s*(?:\\(\\s*(\\d+)\\s*\\)|(\\d+))/i\n);\n\nconst topValue = topMatch\n  ? Number(topMatch[1] ?? topMatch[2])\n  : null;\n\nrecordCheck(\n  'top_is_within_limit',\n  topValue === null ||\n    (Number.isInteger(topValue) && topValue >= 1 && topValue <= 100),\n  'TOP must be a fixed integer between 1 and 100.'\n);\n\n/*\n * Detail-level queries require TOP.\n *\n * Aggregate and grouped queries are allowed without TOP because they return\n * summarized results.\n */\nconst containsAggregate =\n  /\\b(SUM|COUNT|AVG|MIN|MAX)\\s*\\(/i.test(maskedSql);\n\nconst containsGroupBy =\n  /\\bGROUP\\s+BY\\b/i.test(maskedSql);\n\nconst appearsToBeDetailQuery =\n  !containsAggregate && !containsGroupBy;\n\nrecordCheck(\n  'detail_query_has_row_limit',\n  !appearsToBeDetailQuery || topValue !== null,\n  'Nonaggregate detail queries must include TOP with a maximum of 100.'\n);\n\n// The query passes only when every deterministic check succeeds.\nconst safetyPassed = validationErrors.length === 0;\n\nreturn {\n  json: {\n    status,\n    answer: generated.answer ?? '',\n    sql,\n    tables_used: generated.tables_used ?? [],\n    assumptions: generated.assumptions ?? [],\n    citations: generated.citations ?? [],\n    validation_checks: validationChecks,\n    validation_errors: validationErrors,\n    referenced_tables: uniqueReferencedTables,\n    safety_passed: safetyPassed,\n    execution_eligible: status === 'ready' && safetyPassed,\n    validated_sql: safetyPassed ? sql : '',\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -656
+      ],
+      "id": "a5d7abed-c40f-4cbe-ab02-b31fb5daf44c",
+      "name": "Validate SQL Safety"
+    },
+    {
+      "parameters": {
+        "inputText": "={{ $json.question }}",
+        "categories": {
+          "categories": [
+            {
+              "category": "catalog",
+              "description": "Questions asking what data exists or how the warehouse is organized. This includes table and column discovery, definitions, table grain, primary or foreign keys, relationships, join paths, data types, business terms, metric definitions, and explanations of the AdventureWorksDW Internet Sales model.  Examples: - Which table contains Internet sales? - What does SalesAmount mean? - What is the grain of FactInternetSales? - How does FactInternetSales connect to DimProductCategory? - Which column contains the customer key?"
+            },
+            {
+              "category": "sql",
+              "description": "Read-only analytical questions that require generating and potentially executing a SELECT query. This includes requests to calculate, count, total, list, rank, compare, group, filter, summarize, or show data.  Examples: - Show total Internet sales revenue. - List the top 10 products by sales. - Count Internet orders by year. - Compare gross product profit by category. - Show sample Internet sales orders."
+            },
+            {
+              "category": "unsupported",
+              "description": "Requests outside the AdventureWorksDW Internet Sales domain or requests that modify data or database objects. This includes INSERT, UPDATE, DELETE, MERGE, TRUNCATE, DROP, ALTER, CREATE, EXECUTE, permissions, database administration, employee payroll, and unrelated domains.  Examples: - Delete sales before 2020. - Update product prices. - Drop FactInternetSales. - Show employee salaries."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textClassifier",
+      "typeVersion": 1.1,
+      "position": [
+        -1184,
+        -1072
+      ],
+      "id": "bec1042d-a423-45c7-8145-c9f3c9a98589",
+      "name": "Classify User Question"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4-nano",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4-nano"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1168,
+        -1264
+      ],
+      "id": "587d1638-4703-4497-9cea-97438716cbab",
+      "name": "Classifier Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the AdventureWorksDW Internet Sales Data Catalog Assistant.\n\nAnswer the user's question using only the retrieved catalog context supplied below.\n\nRules:\n1. Do not use outside knowledge.\n2. Do not invent tables, columns, relationships, definitions, or calculations.\n3. If the context does not contain enough information, say:\n   \"The available catalog does not contain enough information to answer that question.\"\n4. When discussing a table or column, use its exact catalog name.\n5. Clearly distinguish business definitions from physical database metadata.\n6. For relationship questions, explain the join path in order.\n7. Do not generate new executable SQL in this catalog-only workflow.\n8. You may show a canonical SQL expression if it appears in the retrieved context.\n9. Cite supporting statements using the retrieved DOCUMENT_ID in square brackets.\n10. Finish with a Sources section listing the unique document IDs used.\n11. Keep the response concise and practical.\n\nUSER QUESTION:\n{{ $json.question }}\n\nRETRIEVED CATALOG CONTEXT:\n{{ $json.context }}",
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        160,
+        -1088
+      ],
+      "id": "52b21be4-75f1-4263-9398-db77406ceb56",
+      "name": "Generate Catalog Answer"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3d8e4659-a2a5-48cb-a81f-d389fa6e3112",
+              "name": "output",
+              "value": "={{ $json.text || $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        464,
+        -1088
+      ],
+      "id": "c0232b2b-3c9d-4d0b-b0fc-dde063a381ba",
+      "name": "Final Chat Response"
+    },
+    {
+      "parameters": {
+        "mode": "load",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "adventureworks-catalog",
+          "mode": "list",
+          "cachedResultName": "adventureworks-catalog"
+        },
+        "prompt": "={{ $('Prepare Question').first().json.question }}",
+        "topK": 5,
+        "options": {
+          "pineconeNamespace": "adventureworks-v1"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        -592,
+        -1088
+      ],
+      "id": "166392f8-4454-4b2d-af28-f09a32d883cb",
+      "name": "Search AdventureWorks Catalog1",
+      "credentials": {
+        "pineconeApi": {
+          "id": "3pBJgS3iswnECkNv",
+          "name": "Pinecone AdventureWorks"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -592,
+        -912
+      ],
+      "id": "15ffe874-9ba3-4423-b84b-53828ace73fe",
+      "name": "OpenAI - RAG Project1",
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "documents",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        -1088
+      ],
+      "id": "69a97a79-e4d9-4b2f-a881-c1107db41250",
+      "name": "Aggregate Retrieved Documents1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d0b50a78-c0fa-46cf-8cad-49bbc360c9f2",
+              "name": "question",
+              "value": "={{ $('Prepare Question').first().json.question }}",
+              "type": "string"
+            },
+            {
+              "id": "1dc71ac9-cd54-4c98-b4e8-27b9f6f41a62",
+              "name": "context",
+              "value": "={{\n  $json.documents.map((result, index) =>\n    'SOURCE ' + (index + 1) + '\\n' +\n    'DOCUMENT_ID: ' + (result.document?.metadata?.document_id || 'unknown') + '\\n' +\n    'DOCUMENT_TYPE: ' + (result.document?.metadata?.document_type || 'unknown') + '\\n' +\n    'TABLE: ' + (result.document?.metadata?.qualified_table_name || '') + '\\n' +\n    'SIMILARITY SCORE: ' + (result.score ?? 'not provided') + '\\n' +\n    'CONTENT:\\n' + (result.document?.pageContent || '')\n  ).join('\\n\\n---\\n\\n')\n}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -32,
+        -1088
+      ],
+      "id": "6c00b301-d4f8-4970-a064-95d8a0db4682",
+      "name": "Build Grounded Context1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        -912
+      ],
+      "id": "794fb83d-22cc-4fda-b20b-46ed6acc077b",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fbcabff6-fe50-48c1-b66b-7d855e154827",
+              "name": "output",
+              "value": "This assistant supports read-only questions about the AdventureWorksDW Internet Sales data catalog and analytical SELECT queries. The request is outside that scope or would modify data, so no SQL was generated or executed.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -848,
+        -992
+      ],
+      "id": "a46e4bad-5405-47e0-a9fb-6acf61293882",
+      "name": "Unsupported Request Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Prepare Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Question": {
+      "main": [
+        [
+          {
+            "node": "Classify User Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - RAG Project": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Search AdventureWorks Catalog",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search AdventureWorks Catalog": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Retrieved Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Retrieved Documents": {
+      "main": [
+        [
+          {
+            "node": "Build Grounded Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate SQL Query",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Grounded Context": {
+      "main": [
+        [
+          {
+            "node": "Generate SQL Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SQL Query": {
+      "main": [
+        [
+          {
+            "node": "Validate SQL Safety",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate SQL Query",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is SQL Eligible for Execution?": {
+      "main": [
+        [
+          {
+            "node": "Microsoft SQL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blocked Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft SQL": {
+      "main": [
+        [
+          {
+            "node": "All Item Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Execution Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Item Data": {
+      "main": [
+        [
+          {
+            "node": "Format Query Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate SQL Safety": {
+      "main": [
+        [
+          {
+            "node": "Is SQL Eligible for Execution?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classifier Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify User Question",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Catalog Answer": {
+      "main": [
+        [
+          {
+            "node": "Final Chat Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search AdventureWorks Catalog1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Retrieved Documents1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - RAG Project1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Search AdventureWorks Catalog1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Retrieved Documents1": {
+      "main": [
+        [
+          {
+            "node": "Build Grounded Context1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Grounded Context1": {
+      "main": [
+        [
+          {
+            "node": "Generate Catalog Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Catalog Answer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify User Question": {
+      "main": [
+        [
+          {
+            "node": "Search AdventureWorks Catalog1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search AdventureWorks Catalog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unsupported Request Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ac0256db-71bf-4f58-9c84-95ff4671881c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e4991bb484873ebfae994b0a095aca13183fd292223d09bda8405c8ef7a179c2"
+  },
+  "nodeGroups": [],
+  "id": "MJnk2p2EBPTJTeu8",
+  "tags": []
+}

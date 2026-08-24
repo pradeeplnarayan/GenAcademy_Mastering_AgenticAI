@@ -1,0 +1,388 @@
+{
+  "name": "03_Generate Curated Internet Sales Knowledge",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        -960
+      ],
+      "id": "d02d2d6f-3269-45bd-8755-f784a15ea345",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH BusinessGlossary AS (\n    SELECT *\n    FROM (\n        VALUES\n            (\n                'internet_sales_revenue',\n                'Internet Sales Revenue',\n                'measure',\n                'Internet Sales Revenue is calculated as SUM(FactInternetSales.SalesAmount). SalesAmount excludes TaxAmt and Freight. Unless the user explicitly requests tax or freight, do not add those fields to revenue.',\n                'SUM(fis.SalesAmount)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'gross_product_profit',\n                'Gross Product Profit',\n                'measure',\n                'Gross Product Profit is calculated as Internet Sales Revenue minus Total Product Cost. It excludes tax, freight, operating expenses, and other overhead. It should not be described as net profit.',\n                'SUM(fis.SalesAmount - fis.TotalProductCost)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'gross_margin_percentage',\n                'Gross Margin Percentage',\n                'measure',\n                'Gross Margin Percentage is Gross Product Profit divided by Internet Sales Revenue, multiplied by 100. Use NULLIF to prevent division by zero.',\n                '100.0 * SUM(fis.SalesAmount - fis.TotalProductCost) / NULLIF(SUM(fis.SalesAmount), 0)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'internet_order_count',\n                'Internet Order Count',\n                'measure',\n                'Internet Order Count is the distinct count of SalesOrderNumber. Do not use COUNT(*) because FactInternetSales contains one row per sales order line.',\n                'COUNT(DISTINCT fis.SalesOrderNumber)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'units_sold',\n                'Units Sold',\n                'measure',\n                'Units Sold is the sum of OrderQuantity across Internet sales order lines.',\n                'SUM(fis.OrderQuantity)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'average_order_value',\n                'Average Order Value',\n                'measure',\n                'Average Order Value is Internet Sales Revenue divided by distinct Internet Order Count. Use NULLIF to prevent division by zero.',\n                'SUM(fis.SalesAmount) / NULLIF(COUNT(DISTINCT fis.SalesOrderNumber), 0)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'unique_customer_count',\n                'Unique Customer Count',\n                'measure',\n                'Unique Customer Count is the distinct count of CustomerKey appearing in FactInternetSales for the requested filters.',\n                'COUNT(DISTINCT fis.CustomerKey)',\n                'dbo.FactInternetSales'\n            ),\n            (\n                'order_date',\n                'Order Date',\n                'date_role',\n                'Order Date is the date on which an Internet sales order was placed. Join FactInternetSales.OrderDateKey to DimDate.DateKey. Use Order Date unless the user explicitly requests due date or ship date.',\n                'fis.OrderDateKey = d.DateKey',\n                'dbo.FactInternetSales,dbo.DimDate'\n            ),\n            (\n                'product_category',\n                'Product Category',\n                'dimension',\n                'Product Category is the highest product classification. Navigate from FactInternetSales to DimProduct, then DimProductSubcategory, and finally DimProductCategory.',\n                'FactInternetSales -> DimProduct -> DimProductSubcategory -> DimProductCategory',\n                'dbo.FactInternetSales,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory'\n            ),\n            (\n                'customer_geography',\n                'Customer Geography',\n                'dimension',\n                'Customer Geography describes the geographic attributes of the customer. Navigate from FactInternetSales to DimCustomer and then DimGeography.',\n                'FactInternetSales -> DimCustomer -> DimGeography',\n                'dbo.FactInternetSales,dbo.DimCustomer,dbo.DimGeography'\n            ),\n            (\n                'sales_territory',\n                'Sales Territory',\n                'dimension',\n                'Sales Territory classifies Internet sales by territory, country, and group. Join FactInternetSales.SalesTerritoryKey directly to DimSalesTerritory.SalesTerritoryKey.',\n                'fis.SalesTerritoryKey = st.SalesTerritoryKey',\n                'dbo.FactInternetSales,dbo.DimSalesTerritory'\n            ),\n            (\n                'ambiguous_profit',\n                'Profit Interpretation Policy',\n                'usage_policy',\n                'If a user asks for profit without defining the type, interpret it as Gross Product Profit only when the response clearly states that assumption. If the user asks for net profit, explain that AdventureWorksDW does not contain all operating expenses required to calculate true net profit.',\n                'SalesAmount - TotalProductCost',\n                'dbo.FactInternetSales'\n            )\n    ) AS g (\n        term_id,\n        business_term,\n        term_type,\n        definition,\n        canonical_expression,\n        relevant_tables\n    )\n)\nSELECT\n    CONCAT('glossary:', term_id) AS document_id,\n    'business_glossary' AS document_type,\n    'internet_sales' AS domain,\n    DB_NAME() AS source_database,\n    'dbo' AS schema_name,\n    '' AS table_name,\n    '' AS qualified_table_name,\n    business_term,\n    term_type,\n    canonical_expression,\n    relevant_tables,\n    CONCAT(\n        'BUSINESS TERM: ',\n        business_term,\n        CHAR(10),\n        'TYPE: ',\n        term_type,\n        CHAR(10),\n        'DOMAIN: Internet Sales',\n        CHAR(10),\n        'DEFINITION: ',\n        definition,\n        CHAR(10),\n        'CANONICAL EXPRESSION: ',\n        canonical_expression,\n        CHAR(10),\n        'RELEVANT TABLES: ',\n        relevant_tables\n    ) AS content\nFROM BusinessGlossary\nORDER BY business_term;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.2,
+      "position": [
+        -1712,
+        -1056
+      ],
+      "id": "1cf8c320-cf91-4ee2-a241-349815cf372c",
+      "name": "Generate Business Glossary",
+      "credentials": {
+        "microsoftSql": {
+          "id": "t7hoBybsO4Mm7M3V",
+          "name": "AdventureWorks-ReadOnly"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH SqlExamples AS (\n    SELECT *\n    FROM (\n        VALUES\n            (\n                'total_internet_sales',\n                'What is the total Internet sales revenue?',\n                'aggregation',\n                'dbo.FactInternetSales',\n                CAST(\n                    N'SELECT\n    CAST(SUM(fis.SalesAmount) AS decimal(18,2)) AS InternetSalesRevenue\nFROM dbo.FactInternetSales AS fis;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'sales_by_year',\n                'Show Internet sales revenue by year.',\n                'time_series',\n                'dbo.FactInternetSales,dbo.DimDate',\n                CAST(\n                    N'SELECT\n    d.CalendarYear,\n    CAST(SUM(fis.SalesAmount) AS decimal(18,2)) AS InternetSalesRevenue\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimDate AS d\n    ON d.DateKey = fis.OrderDateKey\nGROUP BY\n    d.CalendarYear\nORDER BY\n    d.CalendarYear;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'sales_by_category',\n                'Show Internet sales revenue by product category.',\n                'dimensional_analysis',\n                'dbo.FactInternetSales,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',\n                CAST(\n                    N'SELECT\n    pc.EnglishProductCategoryName AS ProductCategory,\n    CAST(SUM(fis.SalesAmount) AS decimal(18,2)) AS InternetSalesRevenue\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimProduct AS p\n    ON p.ProductKey = fis.ProductKey\nINNER JOIN dbo.DimProductSubcategory AS ps\n    ON ps.ProductSubcategoryKey = p.ProductSubcategoryKey\nINNER JOIN dbo.DimProductCategory AS pc\n    ON pc.ProductCategoryKey = ps.ProductCategoryKey\nGROUP BY\n    pc.EnglishProductCategoryName\nORDER BY\n    InternetSalesRevenue DESC;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'top_products_by_sales',\n                'What are the top 10 products by Internet sales revenue?',\n                'ranking',\n                'dbo.FactInternetSales,dbo.DimProduct',\n                CAST(\n                    N'SELECT TOP (10)\n    p.EnglishProductName AS ProductName,\n    CAST(SUM(fis.SalesAmount) AS decimal(18,2)) AS InternetSalesRevenue\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimProduct AS p\n    ON p.ProductKey = fis.ProductKey\nGROUP BY\n    p.EnglishProductName\nORDER BY\n    InternetSalesRevenue DESC;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'sales_by_territory',\n                'Show Internet sales revenue by sales territory.',\n                'dimensional_analysis',\n                'dbo.FactInternetSales,dbo.DimSalesTerritory',\n                CAST(\n                    N'SELECT\n    st.SalesTerritoryGroup,\n    st.SalesTerritoryCountry,\n    st.SalesTerritoryRegion,\n    CAST(SUM(fis.SalesAmount) AS decimal(18,2)) AS InternetSalesRevenue\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimSalesTerritory AS st\n    ON st.SalesTerritoryKey = fis.SalesTerritoryKey\nGROUP BY\n    st.SalesTerritoryGroup,\n    st.SalesTerritoryCountry,\n    st.SalesTerritoryRegion\nORDER BY\n    InternetSalesRevenue DESC;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'top_customers_by_sales',\n                'Who are the top 10 customers by Internet sales revenue?',\n                'ranking',\n                'dbo.FactInternetSales,dbo.DimCustomer',\n                CAST(\n                    N'SELECT TOP (10)\n    c.CustomerKey,\n    c.FirstName,\n    c.LastName,\n    CAST(SUM(fis.SalesAmount) AS decimal(18,2)) AS InternetSalesRevenue\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimCustomer AS c\n    ON c.CustomerKey = fis.CustomerKey\nGROUP BY\n    c.CustomerKey,\n    c.FirstName,\n    c.LastName\nORDER BY\n    InternetSalesRevenue DESC;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'order_count_by_year',\n                'Show the number of Internet orders by year.',\n                'time_series',\n                'dbo.FactInternetSales,dbo.DimDate',\n                CAST(\n                    N'SELECT\n    d.CalendarYear,\n    COUNT(DISTINCT fis.SalesOrderNumber) AS InternetOrderCount\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimDate AS d\n    ON d.DateKey = fis.OrderDateKey\nGROUP BY\n    d.CalendarYear\nORDER BY\n    d.CalendarYear;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'gross_profit_by_category',\n                'Show gross product profit by product category.',\n                'dimensional_analysis',\n                'dbo.FactInternetSales,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',\n                CAST(\n                    N'SELECT\n    pc.EnglishProductCategoryName AS ProductCategory,\n    CAST(\n        SUM(fis.SalesAmount - fis.TotalProductCost)\n        AS decimal(18,2)\n    ) AS GrossProductProfit\nFROM dbo.FactInternetSales AS fis\nINNER JOIN dbo.DimProduct AS p\n    ON p.ProductKey = fis.ProductKey\nINNER JOIN dbo.DimProductSubcategory AS ps\n    ON ps.ProductSubcategoryKey = p.ProductSubcategoryKey\nINNER JOIN dbo.DimProductCategory AS pc\n    ON pc.ProductCategoryKey = ps.ProductCategoryKey\nGROUP BY\n    pc.EnglishProductCategoryName\nORDER BY\n    GrossProductProfit DESC;'\n                    AS nvarchar(max)\n                )\n            ),\n            (\n                'average_order_value',\n                'What is the average Internet order value?',\n                'aggregation',\n                'dbo.FactInternetSales',\n                CAST(\n                    N'SELECT\n    CAST(\n        SUM(fis.SalesAmount)\n        / NULLIF(COUNT(DISTINCT fis.SalesOrderNumber), 0)\n        AS decimal(18,2)\n    ) AS AverageOrderValue\nFROM dbo.FactInternetSales AS fis;'\n                    AS nvarchar(max)\n                )\n            )\n    ) AS e (\n        example_id,\n        example_question,\n        analysis_type,\n        relevant_tables,\n        sql_query\n    )\n)\nSELECT\n    CONCAT('sql-example:', example_id) AS document_id,\n    'sql_example' AS document_type,\n    'internet_sales' AS domain,\n    DB_NAME() AS source_database,\n    'dbo' AS schema_name,\n    '' AS table_name,\n    '' AS qualified_table_name,\n    example_question,\n    analysis_type,\n    relevant_tables,\n    sql_query,\n    CONCAT(\n        'VERIFIED SQL EXAMPLE',\n        CHAR(10),\n        'QUESTION: ',\n        example_question,\n        CHAR(10),\n        'DOMAIN: Internet Sales',\n        CHAR(10),\n        'ANALYSIS TYPE: ',\n        analysis_type,\n        CHAR(10),\n        'RELEVANT TABLES: ',\n        relevant_tables,\n        CHAR(10),\n        'SQL DIALECT: Microsoft T-SQL',\n        CHAR(10),\n        'SQL:',\n        CHAR(10),\n        sql_query\n    ) AS content\nFROM SqlExamples\nORDER BY example_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.2,
+      "position": [
+        -1712,
+        -880
+      ],
+      "id": "e302f923-f8d0-46ca-9401-965767a26f47",
+      "name": "Generate SQL Examples",
+      "credentials": {
+        "microsoftSql": {
+          "id": "t7hoBybsO4Mm7M3V",
+          "name": "AdventureWorks-ReadOnly"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1456,
+        -992
+      ],
+      "id": "0e166ab4-2551-4cb4-ada1-7c7344c658cd",
+      "name": "Merge Curated Documents"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0ccb9833-ec6e-4613-b8e8-5e4f48194eee",
+              "name": "source_system",
+              "value": "AdventureWorksDW",
+              "type": "string"
+            },
+            {
+              "id": "558f2f4f-1d1e-43c0-b33a-463898dc7c82",
+              "name": "catalog_version",
+              "value": "1.0",
+              "type": "string"
+            },
+            {
+              "id": "2f763785-9a11-41ad-9fee-bb081578207e",
+              "name": "language",
+              "value": "en",
+              "type": "string"
+            },
+            {
+              "id": "28b6665a-280b-4c80-b9d1-fd69f797fcde",
+              "name": "generated_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "c19907bd-4c2d-4432-8549-04fc52c1924d",
+              "name": "document_id",
+              "value": "={{ $json.document_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1248,
+        -992
+      ],
+      "id": "35636c59-334c-42c9-b90a-562501ce4f6e",
+      "name": "Normalize Curated Documens"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "adventureworks-catalog",
+          "mode": "list",
+          "cachedResultName": "adventureworks-catalog"
+        },
+        "options": {
+          "pineconeNamespace": "adventureworks-v1"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        -848,
+        -976
+      ],
+      "id": "f378d697-246b-4924-91bb-01820d4e58e0",
+      "name": "Pinecone Vector Store",
+      "credentials": {
+        "pineconeApi": {
+          "id": "3pBJgS3iswnECkNv",
+          "name": "Pinecone AdventureWorks"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -928,
+        -736
+      ],
+      "id": "978c7bab-1384-4460-aaf7-63cc4f6c3160",
+      "name": "OpenAI RAG Project",
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1024,
+        -992
+      ],
+      "id": "09983053-f361-47da-98a8-602aaac9349c",
+      "name": "Ingest One Document At a Time"
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "document_id",
+                "value": "={{ $json.document_id || '' }}"
+              },
+              {
+                "name": "document_type",
+                "value": "={{ $json.document_type || '' }}"
+              },
+              {
+                "name": "domain",
+                "value": "={{ $json.domain || '' }}"
+              },
+              {
+                "name": "source_database",
+                "value": "={{ $json.source_database || '' }}"
+              },
+              {
+                "name": "source_system",
+                "value": "={{ $json.source_system || 'AdventureWorksDW' }}"
+              },
+              {
+                "name": "=schema_name",
+                "value": "={{ $json.schema_name || '' }}"
+              },
+              {
+                "name": "table_name",
+                "value": "={{ $json.table_name || '' }}"
+              },
+              {
+                "name": "qualified_table_name",
+                "value": "={{ $json.qualified_table_name || '' }}"
+              },
+              {
+                "name": "catalog_version",
+                "value": "={{ $json.catalog_version || '1.0' }}"
+              },
+              {
+                "name": "language",
+                "value": "={{ $json.language || 'en' }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        -816,
+        -752
+      ],
+      "id": "ff1933e1-d49b-4ff7-bc41-feea89c76e2a",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkSize": 4000,
+        "chunkOverlap": 200,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        -816,
+        -560
+      ],
+      "id": "836e8acb-4205-4d7a-af07-f72294fc7a68",
+      "name": "Recursive Character Text Splitter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Generate Business Glossary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate SQL Examples",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Business Glossary": {
+      "main": [
+        [
+          {
+            "node": "Merge Curated Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SQL Examples": {
+      "main": [
+        [
+          {
+            "node": "Merge Curated Documents",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Curated Documents": {
+      "main": [
+        [
+          {
+            "node": "Normalize Curated Documens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store": {
+      "main": [
+        [
+          {
+            "node": "Ingest One Document At a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI RAG Project": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest One Document At a Time": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Curated Documens": {
+      "main": [
+        [
+          {
+            "node": "Ingest One Document At a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a5cd35c0-1ace-4725-8511-55e712c7649b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e4991bb484873ebfae994b0a095aca13183fd292223d09bda8405c8ef7a179c2"
+  },
+  "nodeGroups": [],
+  "id": "T3YWxvnbieguZJeJ",
+  "tags": []
+}

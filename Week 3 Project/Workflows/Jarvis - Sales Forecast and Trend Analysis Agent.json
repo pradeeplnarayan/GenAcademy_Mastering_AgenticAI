@@ -1,0 +1,238 @@
+{
+  "name": "Jarvis - Sales Forecast and Trend Analysis Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "message"
+            },
+            {
+              "name": "run_sales",
+              "type": "boolean"
+            },
+            {
+              "name": "sales_task"
+            },
+            {
+              "name": "forecast_months",
+              "type": "number"
+            },
+            {
+              "name": "product_subcategory"
+            }
+          ]
+        }
+      },
+      "id": "29b390d5-05a9-4bb9-b4e3-16ebdd520594",
+      "name": "Called by Router",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -416,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sales-enabled",
+              "leftValue": "={{$json.run_sales}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d7a89a27-7f5d-4089-901d-1677e06e67d6",
+      "name": "Sales Task Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{agent:'sales_forecast',status:'skipped',reason:'No sales forecasting or trend-analysis intent was detected.'}}];"
+      },
+      "id": "78a6476a-1a42-4654-b638-eb59072600a1",
+      "name": "Skip Sales Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DECLARE @n int={{Math.min(12,Math.max(1,Number($json.forecast_months||6)))}}; DECLARE @sub nvarchar(100)=N'{{String($json.product_subcategory||'').replace(/'/g,\"''\")}}'; WITH s AS (SELECT d.FullDateAlternateKey dt,'Internet' channel,COALESCE(ps.EnglishProductSubcategoryName,'Uncategorized') subcategory,SUM(f.SalesAmount) revenue FROM dbo.FactInternetSales f JOIN dbo.DimDate d ON d.DateKey=f.OrderDateKey JOIN dbo.DimProduct p ON p.ProductKey=f.ProductKey LEFT JOIN dbo.DimProductSubcategory ps ON ps.ProductSubcategoryKey=p.ProductSubcategoryKey WHERE @sub='' OR ps.EnglishProductSubcategoryName=@sub GROUP BY d.FullDateAlternateKey,COALESCE(ps.EnglishProductSubcategoryName,'Uncategorized') UNION ALL SELECT d.FullDateAlternateKey,'Reseller',COALESCE(ps.EnglishProductSubcategoryName,'Uncategorized'),SUM(f.SalesAmount) FROM dbo.FactResellerSales f JOIN dbo.DimDate d ON d.DateKey=f.OrderDateKey JOIN dbo.DimProduct p ON p.ProductKey=f.ProductKey LEFT JOIN dbo.DimProductSubcategory ps ON ps.ProductSubcategoryKey=p.ProductSubcategoryKey WHERE @sub='' OR ps.EnglishProductSubcategoryName=@sub GROUP BY d.FullDateAlternateKey,COALESCE(ps.EnglishProductSubcategoryName,'Uncategorized')),m AS(SELECT DATEFROMPARTS(YEAR(dt),MONTH(dt),1) month_start,channel,subcategory,SUM(revenue) revenue FROM s GROUP BY DATEFROMPARTS(YEAR(dt),MONTH(dt),1),channel,subcategory),b AS(SELECT MAX(month_start) last_month FROM m),n AS(SELECT 1 n UNION ALL SELECT n+1 FROM n WHERE n<12) SELECT CONVERT(char(7),DATEADD(month,n.n,b.last_month),120) forecast_month,m.channel,m.subcategory,CAST(AVG(m.revenue) AS decimal(19,2)) forecast_revenue,'same calendar month average' method,COUNT(*) observations FROM b CROSS JOIN n JOIN m ON MONTH(m.month_start)=MONTH(DATEADD(month,n.n,b.last_month)) WHERE n.n<=@n GROUP BY DATEADD(month,n.n,b.last_month),m.channel,m.subcategory ORDER BY forecast_month,m.channel,m.subcategory OPTION(MAXRECURSION 12);",
+        "options": {}
+      },
+      "id": "13e7034a-a61b-4979-b4db-cd7a413a8029",
+      "name": "Query Filtered Sales Forecast",
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "microsoftSql": {
+          "id": "t7hoBybsO4Mm7M3V",
+          "name": "AdventureWorks-ReadOnly"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Called by Router').first().json;\n\nconst rows = $input.all()\n  .map(item => item.json)\n  .filter(row => Object.keys(row).length > 0);\n\nreturn [{\n  json: {\n    data: rows,\n    openaiBody: {\n      model: 'gpt-4.1-mini',\n      instructions:\n        'You are the Sales Forecasting and Trend Analysis Agent. ' +\n        'Answer only from the supplied SQL rows. If no rows were returned, ' +\n        'clearly say that no matching historical data was found.',\n      input:\n        `Assigned task: ${req.sales_task || req.message}\\n` +\n        `Product subcategory: ${req.product_subcategory || 'all'}\\n` +\n        `SQL forecast rows: ${JSON.stringify(rows)}`,\n      store: false\n    }\n  }\n}];"
+      },
+      "id": "70940460-9e19-4943-b267-97975ba36398",
+      "name": "Build Forecast Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json.openaiBody)}}",
+        "options": {}
+      },
+      "id": "33d997a2-74e6-4c1c-b374-f3d4c9982e1d",
+      "name": "Explain Forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const analysis=($json.output||[]).flatMap(i=>i.content||[]).find(c=>c.type==='output_text')?.text||'No narrative returned'; const prior=$('Build Forecast Analysis').first().json; return [{json:{agent:'sales_forecast',status:'completed',analysis,data:prior.data}}];"
+      },
+      "id": "98fbada2-25a6-43c6-9c1e-d1058da4d5b7",
+      "name": "Return Sales Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Called by Router": {
+      "main": [
+        [
+          {
+            "node": "Sales Task Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sales Task Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Query Filtered Sales Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Sales Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Filtered Sales Forecast": {
+      "main": [
+        [
+          {
+            "node": "Build Forecast Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Forecast Analysis": {
+      "main": [
+        [
+          {
+            "node": "Explain Forecast",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Explain Forecast": {
+      "main": [
+        [
+          {
+            "node": "Return Sales Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6fa09a03-b187-4de7-8f8b-40e93002deb6",
+  "meta": {
+    "instanceId": "e4991bb484873ebfae994b0a095aca13183fd292223d09bda8405c8ef7a179c2"
+  },
+  "nodeGroups": [],
+  "id": "wXxMaXTFYMVggc5H",
+  "tags": []
+}

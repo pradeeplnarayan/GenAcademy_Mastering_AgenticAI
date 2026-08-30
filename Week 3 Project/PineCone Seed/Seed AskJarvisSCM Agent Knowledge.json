@@ -1,0 +1,137 @@
+{
+  "name": "04 - Seed AskJarvisSCM Agent Knowledge",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "When clicking Execute workflow",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-900, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const common={source_database:'AdventureWorksDW2022',source_system:'AdventureWorksDW',schema_name:'dbo',catalog_version:'2.0',language:'en',approved:true,sql_dialect:'tsql',contains_pii:false};\nconst d=(document_id,document_type,domain,agent,content,m={})=>({json:{...common,document_id,document_type,domain,agent,content,table_name:'',qualified_table_name:'',relevant_tables:'',analysis_type:'',metric:'',sales_channel:'',time_grain:'',product_level:'',segment:'',risk_level:'',communication_type:'',forecast_method:'',...m}});\nreturn [\n d('table:dbo.FactInternetSales','table_catalog','shared','both','TABLE: dbo.FactInternetSales\\nGRAIN: one Internet sales order line.\\nUSE: Internet revenue, order quantity, customer history, last purchase, total spend and product preferences.\\nKEY JOINS: OrderDateKey to DimDate.DateKey; ProductKey to DimProduct.ProductKey; CustomerKey to DimCustomer.CustomerKey.\\nMEASURES: SalesAmount is revenue; OrderQuantity is units; SalesOrderNumber identifies an order.','',{table_name:'FactInternetSales',qualified_table_name:'dbo.FactInternetSales',relevant_tables:'dbo.FactInternetSales,dbo.DimDate,dbo.DimProduct,dbo.DimCustomer'}),\n d('table:dbo.FactResellerSales','table_catalog','sales_forecasting','sales_forecast','TABLE: dbo.FactResellerSales\\nGRAIN: one reseller sales order line.\\nUSE: reseller revenue, quantity and seasonal demand.\\nKEY JOINS: OrderDateKey to DimDate.DateKey and ProductKey to DimProduct.ProductKey.\\nMEASURE: SalesAmount is reseller revenue.','',{table_name:'FactResellerSales',qualified_table_name:'dbo.FactResellerSales',relevant_tables:'dbo.FactResellerSales,dbo.DimDate,dbo.DimProduct'}),\n d('table:dbo.DimDate','table_catalog','shared','both','TABLE: dbo.DimDate\\nGRAIN: one calendar date. Use FullDateAlternateKey for dates and CalendarYear, EnglishMonthName and month number for time analysis. Sales facts join through OrderDateKey = DateKey.','',{table_name:'DimDate',qualified_table_name:'dbo.DimDate',relevant_tables:'dbo.DimDate,dbo.FactInternetSales,dbo.FactResellerSales',analysis_type:'time_series',time_grain:'day,month,quarter,year'}),\n d('table:dbo.DimProduct','table_catalog','shared','both','TABLE: dbo.DimProduct\\nGRAIN: one product version. Product facts join through ProductKey. ProductSubcategoryKey connects products to subcategory and category. Use EnglishProductName for display.','',{table_name:'DimProduct',qualified_table_name:'dbo.DimProduct',relevant_tables:'dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'product'}),\n d('table:dbo.DimProductSubcategory','table_catalog','shared','both','TABLE: dbo.DimProductSubcategory\\nGRAIN: one product subcategory. Join DimProduct.ProductSubcategoryKey to this table, then ProductCategoryKey to DimProductCategory.','',{table_name:'DimProductSubcategory',qualified_table_name:'dbo.DimProductSubcategory',relevant_tables:'dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'subcategory'}),\n d('table:dbo.DimProductCategory','table_catalog','shared','both','TABLE: dbo.DimProductCategory\\nGRAIN: one top-level product category. EnglishProductCategoryName provides business category labels such as Bikes, Components, Clothing and Accessories.','',{table_name:'DimProductCategory',qualified_table_name:'dbo.DimProductCategory',relevant_tables:'dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'category'}),\n d('table:dbo.DimCustomer','table_catalog','customer_analytics','customer_churn','TABLE: dbo.DimCustomer\\nGRAIN: one customer. Join CustomerKey to FactInternetSales.CustomerKey. Names may be used only when drafting a requested email. Do not embed customer rows, email addresses, demographics or other personal data in Pinecone.','',{table_name:'DimCustomer',qualified_table_name:'dbo.DimCustomer',relevant_tables:'dbo.DimCustomer,dbo.FactInternetSales',contains_pii:true}),\n d('relationship:sales-date','relationship_catalog','shared','both','RELATIONSHIPS: FactInternetSales.OrderDateKey = DimDate.DateKey; FactResellerSales.OrderDateKey = DimDate.DateKey. Use the order date for revenue and purchase-recency analysis.','',{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimDate'}),\n d('relationship:sales-product-category','relationship_catalog','shared','both','PRODUCT PATH: sales fact ProductKey = DimProduct.ProductKey; DimProduct.ProductSubcategoryKey = DimProductSubcategory.ProductSubcategoryKey; DimProductSubcategory.ProductCategoryKey = DimProductCategory.ProductCategoryKey.','',{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'product,subcategory,category'}),\n d('relationship:internet-customer','relationship_catalog','customer_analytics','customer_churn','CUSTOMER PATH: FactInternetSales.CustomerKey = DimCustomer.CustomerKey. Reseller sales must not be attributed to individual DimCustomer records.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimCustomer'}),\n d('metric:sales-revenue','metric_definition','sales_forecasting','sales_forecast','REVENUE: SUM(SalesAmount). Calculate Internet and Reseller revenue separately and label the channel. Combine them only when requested, using UNION ALL before aggregation. Never sum pre-aggregated totals twice.','',{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales',analysis_type:'aggregation,time_series',metric:'revenue',sales_channel:'internet,reseller,combined'}),\n d('forecast:monthly-seasonal-baseline','forecast_definition','sales_forecasting','sales_forecast','MONTHLY FORECAST POLICY: Aggregate revenue by calendar month, channel and product category. Forecast a future month from the average of the same calendar month in prior years. If unavailable, use the trailing 12-month average. Return method and observation count. Describe this as a seasonal baseline, not a statistically validated prediction.','',{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimDate,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',analysis_type:'forecast,seasonality',metric:'revenue',sales_channel:'internet,reseller',time_grain:'month',product_level:'category',forecast_method:'same_month_historical_average,trailing_12_month_average'}),\n d('metric:customer-recency','metric_definition','customer_analytics','customer_churn','RECENCY DAYS: DATEDIFF(day, customer last purchase date, latest transaction date in FactInternetSales). Use the warehouse latest transaction date, not the current system date, because AdventureWorks is historical sample data.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimDate,dbo.DimCustomer',analysis_type:'rfm,churn_risk',metric:'recency_days'}),\n d('metric:customer-frequency-value','metric_definition','customer_analytics','customer_churn','CUSTOMER FREQUENCY AND VALUE: OrderCount = COUNT(DISTINCT SalesOrderNumber). TotalSpend = SUM(SalesAmount), grouped by CustomerKey. Do not count order lines as separate orders.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimCustomer',analysis_type:'rfm,segmentation',metric:'order_count,total_spend'}),\n d('metric:favorite-category','metric_definition','customer_analytics','customer_churn','FAVORITE PRODUCT CATEGORY: category with the highest SUM(FactInternetSales.SalesAmount) for the customer. Resolve category through DimProduct, DimProductSubcategory and DimProductCategory. Label ties deterministically if the application requires stable results.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',analysis_type:'segmentation,personalization',metric:'category_spend',product_level:'category'}),\n d('segment:customer-tier-policy','segmentation_rule','customer_analytics','customer_churn','CUSTOMER TIERS: At-Risk when RecencyDays > 365. Otherwise VIP when TotalSpend >= 5000 or OrderCount >= 8. Otherwise Regular. Evaluate At-Risk first so an inactive high spender is not mislabeled as an active VIP. These thresholds are business heuristics and must not be described as learned predictions.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimCustomer,dbo.DimDate',analysis_type:'segmentation,rfm',metric:'recency_days,total_spend,order_count',segment:'VIP,Regular,At-Risk'}),\n d('risk:customer-inactivity-policy','segmentation_rule','customer_analytics','customer_churn','CHURN RISK: High when RecencyDays > 730; Medium when RecencyDays > 365; otherwise Low. This is an inactivity heuristic, not a churn probability and not evidence that the customer has actually churned.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimDate,dbo.DimCustomer',analysis_type:'churn_risk',metric:'recency_days',risk_level:'Low,Medium,High'}),\n d('policy:reengagement-email','communication_policy','customer_analytics','customer_churn','RE-ENGAGEMENT EMAIL: produce a draft only. Do not mention internal segments, risk labels or scores. Do not invent offers, discounts or preferences. Personalize with the favorite category only when returned by SQL. Avoid manipulative urgency. Require human approval before sending.','',{analysis_type:'email_guidance',segment:'At-Risk',risk_level:'Medium,High',communication_type:'re_engagement_email'}),\n d('quality:forecast-and-customer-guardrails','data_quality_rule','shared','both','GROUNDING RULES: SQL is authoritative for numeric results. Pinecone supplies definitions and policies only. Never answer with numbers found in vector documents. Report empty result sets. State forecast method and limitations. Do not send customer email addresses or demographic fields to the LLM.','',{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimCustomer,dbo.DimDate,dbo.DimProduct',analysis_type:'grounding,data_quality'}),\n d('sql-example:monthly-category-channel','verified_sql_example','sales_forecasting','sales_forecast','VERIFIED QUERY PATTERN: UNION ALL Internet and Reseller order lines after labeling channel; join OrderDateKey to DimDate and ProductKey through product subcategory to product category; group by DATEFROMPARTS(YEAR(date),MONTH(date),1), channel and category; SUM(SalesAmount).','',{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimDate,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',analysis_type:'time_series,seasonality',metric:'revenue',sales_channel:'internet,reseller',time_grain:'month',product_level:'category'}),\n d('sql-example:customer-rfm','verified_sql_example','customer_analytics','customer_churn','VERIFIED QUERY PATTERN: group FactInternetSales by CustomerKey; last purchase is MAX joined DimDate.FullDateAlternateKey; frequency is COUNT(DISTINCT SalesOrderNumber); value is SUM(SalesAmount); derive favorite category in a separate grouped CTE and join by CustomerKey.','',{relevant_tables:'dbo.FactInternetSales,dbo.DimCustomer,dbo.DimDate,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',analysis_type:'rfm,segmentation,churn_risk',metric:'recency_days,order_count,total_spend,category_spend'})\n];"
+      },
+      "id": "generate-documents",
+      "name": "Generate Grounding Documents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-680, 0]
+    },
+    {
+      "parameters": {"jsCode": "const maps={\n 'table:dbo.FactInternetSales':{table_name:'FactInternetSales',qualified_table_name:'dbo.FactInternetSales',relevant_tables:'dbo.FactInternetSales,dbo.DimDate,dbo.DimProduct,dbo.DimCustomer'},\n 'table:dbo.FactResellerSales':{table_name:'FactResellerSales',qualified_table_name:'dbo.FactResellerSales',relevant_tables:'dbo.FactResellerSales,dbo.DimDate,dbo.DimProduct'},\n 'table:dbo.DimDate':{table_name:'DimDate',qualified_table_name:'dbo.DimDate',relevant_tables:'dbo.DimDate,dbo.FactInternetSales,dbo.FactResellerSales',analysis_type:'time_series',time_grain:'day,month,quarter,year'},\n 'table:dbo.DimProduct':{table_name:'DimProduct',qualified_table_name:'dbo.DimProduct',relevant_tables:'dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'product'},\n 'table:dbo.DimProductSubcategory':{table_name:'DimProductSubcategory',qualified_table_name:'dbo.DimProductSubcategory',relevant_tables:'dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'subcategory'},\n 'table:dbo.DimProductCategory':{table_name:'DimProductCategory',qualified_table_name:'dbo.DimProductCategory',relevant_tables:'dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'category'},\n 'table:dbo.DimCustomer':{table_name:'DimCustomer',qualified_table_name:'dbo.DimCustomer',relevant_tables:'dbo.DimCustomer,dbo.FactInternetSales',contains_pii:true},\n 'relationship:sales-date':{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimDate'},\n 'relationship:sales-product-category':{relevant_tables:'dbo.FactInternetSales,dbo.FactResellerSales,dbo.DimProduct,dbo.DimProductSubcategory,dbo.DimProductCategory',product_level:'product,subcategory,category'},\n 'relationship:internet-customer':{relevant_tables:'dbo.FactInternetSales,dbo.DimCustomer'}\n}; return $input.all().map(i=>({json:{...i.json,...(maps[i.json.document_id]||{})}}));"},
+      "id": "enrich-metadata",
+      "name": "Enrich and Normalize Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-560, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const arrayFields=['relevant_tables','analysis_type','metric','sales_channel','time_grain','product_level','segment','risk_level','communication_type','forecast_method']; return $input.all().map(item=>{const json={...item.json}; if(json.agent==='customer_churn') json.agent='customer_intelligence_campaign'; for(const field of arrayFields){const value=json[field]; json[field]=Array.isArray(value)?value.map(v=>String(v).trim()).filter(Boolean):String(value||'').split(',').map(v=>v.trim()).filter(Boolean);} return {json};});"
+      },
+      "id": "normalize-filter-arrays",
+      "name": "Normalize Filter Arrays",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-440, 0]
+    },
+    {
+      "parameters": {"options": {}},
+      "id": "loop-documents",
+      "name": "Ingest One Document At a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-240, 0]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {"__rl": true, "value": "adventureworks-catalog", "mode": "list", "cachedResultName": "adventureworks-catalog"},
+        "options": {"pineconeNamespace": "AskJarvisSCM"}
+      },
+      "id": "pinecone-store",
+      "name": "Pinecone Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [20, 16],
+      "credentials": {"pineconeApi": {"id": "3pBJgS3iswnECkNv", "name": "Pinecone AdventureWorks"}}
+    },
+    {
+      "parameters": {"options": {"dimensions": 1536}},
+      "id": "openai-embeddings",
+      "name": "OpenAI Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [-260, 256],
+      "credentials": {"openAiApi": {"id": "CQy9Yn0rrbyHEond", "name": "OpenAI Credential"}}
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {"name": "document_id", "value": "={{ $json.document_id || '' }}"},
+              {"name": "document_type", "value": "={{ $json.document_type || '' }}"},
+              {"name": "domain", "value": "={{ $json.domain || '' }}"},
+              {"name": "agent", "value": "={{ $json.agent || '' }}"},
+              {"name": "source_database", "value": "={{ $json.source_database || '' }}"},
+              {"name": "source_system", "value": "={{ $json.source_system || 'AdventureWorksDW' }}"},
+              {"name": "schema_name", "value": "={{ $json.schema_name || '' }}"},
+              {"name": "table_name", "value": "={{ $json.table_name || '' }}"},
+              {"name": "qualified_table_name", "value": "={{ $json.qualified_table_name || '' }}"},
+              {"name": "relevant_tables", "value": "={{ $json.relevant_tables || '' }}"},
+              {"name": "analysis_type", "value": "={{ $json.analysis_type || '' }}"},
+              {"name": "metric", "value": "={{ $json.metric || '' }}"},
+              {"name": "sales_channel", "value": "={{ $json.sales_channel || '' }}"},
+              {"name": "time_grain", "value": "={{ $json.time_grain || '' }}"},
+              {"name": "product_level", "value": "={{ $json.product_level || '' }}"},
+              {"name": "segment", "value": "={{ $json.segment || '' }}"},
+              {"name": "risk_level", "value": "={{ $json.risk_level || '' }}"},
+              {"name": "communication_type", "value": "={{ $json.communication_type || '' }}"},
+              {"name": "forecast_method", "value": "={{ $json.forecast_method || '' }}"},
+              {"name": "contains_pii", "value": "={{ $json.contains_pii === true }}"},
+              {"name": "approved", "value": "={{ $json.approved === true }}"},
+              {"name": "sql_dialect", "value": "={{ $json.sql_dialect || 'tsql' }}"},
+              {"name": "catalog_version", "value": "={{ $json.catalog_version || '2.0' }}"},
+              {"name": "language", "value": "={{ $json.language || 'en' }}"}
+            ]
+          }
+        }
+      },
+      "id": "data-loader",
+      "name": "Default Data Loader",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [-128, 256]
+    },
+    {
+      "parameters": {"chunkSize": 4000, "chunkOverlap": 200, "options": {}},
+      "id": "text-splitter",
+      "name": "Recursive Character Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [-128, 448]
+    }
+  ],
+  "connections": {
+    "When clicking Execute workflow": {"main": [[{"node": "Generate Grounding Documents", "type": "main", "index": 0}]]},
+    "Generate Grounding Documents": {"main": [[{"node": "Enrich and Normalize Metadata", "type": "main", "index": 0}]]},
+    "Enrich and Normalize Metadata": {"main": [[{"node": "Normalize Filter Arrays", "type": "main", "index": 0}]]},
+    "Normalize Filter Arrays": {"main": [[{"node": "Ingest One Document At a Time", "type": "main", "index": 0}]]},
+    "Ingest One Document At a Time": {"main": [[], [{"node": "Pinecone Vector Store", "type": "main", "index": 0}]]},
+    "Pinecone Vector Store": {"main": [[{"node": "Ingest One Document At a Time", "type": "main", "index": 0}]]},
+    "OpenAI Embeddings": {"ai_embedding": [[{"node": "Pinecone Vector Store", "type": "ai_embedding", "index": 0}]]},
+    "Default Data Loader": {"ai_document": [[{"node": "Pinecone Vector Store", "type": "ai_document", "index": 0}]]},
+    "Recursive Character Text Splitter": {"ai_textSplitter": [[{"node": "Default Data Loader", "type": "ai_textSplitter", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "versionId": "00000000-0000-4000-8000-000000000004",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

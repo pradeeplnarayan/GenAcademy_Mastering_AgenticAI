@@ -1,0 +1,504 @@
+{
+  "name": "Jarvis - Multi-Intent Agent Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "askjarvis",
+        "responseMode": "lastNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "c4796011-7c57-44c2-9da9-172ef7a022fb",
+      "name": "Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1424,
+        112
+      ],
+      "webhookId": "b32344ed-f4ff-4307-9efe-c287142e7b6c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b=$json.body??$json; const message=String(b.message??'').trim(); if(!message) throw new Error('message is required'); return [{json:{message,forecast_months:Math.min(12,Math.max(1,Number(b.forecast_months||6))),customer_key:Math.max(0,Number(b.customer_key||0)),top_n:Math.min(100,Math.max(1,Number(b.top_n||25)))}}];"
+      },
+      "id": "52db5bba-df0f-4f4f-bd57-a9b9e18c5e62",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1216,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({model:'text-embedding-3-small',input:$json.message})}}",
+        "options": {}
+      },
+      "id": "a9514778-187a-420b-bfd2-efd844e3a03a",
+      "name": "Embed Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1024,
+        112
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://adventureworks-catalog-036cn8d.svc.aped-4627-b74a.pinecone.io",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({namespace:'AskJarvisSCM'||'adventureworks',vector:$json.data[0].embedding,topK:5,includeMetadata:true}) }}",
+        "options": {}
+      },
+      "id": "db793008-f5a2-4b00-b9be-06c0ac5efa28",
+      "name": "Retrieve Routing Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -816,
+        112
+      ],
+      "credentials": {
+        "pineconeApi": {
+          "id": "3pBJgS3iswnECkNv",
+          "name": "Pinecone AdventureWorks"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Validate Request').first().json; const context=($json.matches||[]).map(x=>x.metadata?.text||x.metadata?.content||'').filter(Boolean); const actions=['segment_customers','assess_churn_risk','select_campaign_audience','draft_reengagement_email','draft_cross_sell_email']; const schema={type:'object',properties:{run_sales:{type:'boolean'},sales_task:{type:'string'},run_customer:{type:'boolean'},customer_task:{type:'string'},customer_actions:{type:'array',items:{type:'string',enum:actions}},forecast_months:{type:'integer',minimum:1,maximum:12},product_subcategory:{type:'string'},purchase_period:{type:'string',enum:['none','last_completed_quarter','last_90_days','all_history']},promotion_category:{type:'string'},customer_key:{type:'integer',minimum:0},top_n:{type:'integer',minimum:1,maximum:100}},required:['run_sales','sales_task','run_customer','customer_task','customer_actions','forecast_months','product_subcategory','purchase_period','promotion_category','customer_key','top_n'],additionalProperties:false}; return [{json:{openaiBody:{model:'gpt-4.1-mini',instructions:'Decompose the request into independent specialist tasks. Enable sales for forecasts, revenue, demand, seasonality, inventory or budget analysis. Enable customer for segmentation, churn, audience selection, re-engagement or cross-sell email drafting. Enable BOTH for overlapping requests. Preserve product and time filters. Use last_completed_quarter for phrases like last quarter. Never invent a promotion category. Return empty strings when unspecified. Customer actions must include every requested operation.',input:`Request: ${req.message}\\nRetrieved guidance:\\n${context.join('\\n')}`,text:{format:{type:'json_schema',name:'multi_agent_route',strict:true,schema}},store:false}}}];"
+      },
+      "id": "8448de7a-a0b9-4a5e-9405-5db0fba7dfff",
+      "name": "Build Multi-Intent Route Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json.openaiBody)}}",
+        "options": {}
+      },
+      "id": "a22658ef-768a-404d-9ddd-7a95b11bb6f8",
+      "name": "Decompose Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -416,
+        112
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Validate Request').first().json; const text=($json.output||[]).flatMap(i=>i.content||[]).find(c=>c.type==='output_text')?.text; if(!text) throw new Error('Router returned no output_text'); const r=JSON.parse(text); const message=req.message; const salesIntent=/\\b(forecast|forecasting|revenue|seasonal|seasonality|sales trend|demand|inventory|budget)\\b/i.test(message); const customerIntent=/\\b(customer|customers|churn|at-risk|inactive|segment|segmentation|campaign|audience|re-engagement|cross-sell|promotional email|email)\\b/i.test(message); r.run_sales=Boolean(r.run_sales||salesIntent); r.run_customer=Boolean(r.run_customer||customerIntent); const actions=new Set(Array.isArray(r.customer_actions)?r.customer_actions:[]); if(/\\b(at-risk|churn)\\b/i.test(message)) actions.add('assess_churn_risk'); if(/\\bsegment|segmentation\\b/i.test(message)) actions.add('segment_customers'); if(/\\b(audience|customers? who|purchased).*(campaign|email|sale)|campaign audience\\b/i.test(message)) actions.add('select_campaign_audience'); if(/re-engagement email/i.test(message)) actions.add('draft_reengagement_email'); if(/cross-sell|promotional email|accessor(?:y|ies) sale/i.test(message)) actions.add('draft_cross_sell_email'); r.customer_actions=[...actions]; if(r.run_sales&&!r.sales_task) r.sales_task=message; if(r.run_customer&&!r.customer_task) r.customer_task=message; if(!r.run_sales&&!r.run_customer) throw new Error('Request did not match either specialist'); \nconst invalidSubcategory =\n  /^(internet|reseller|internet\\s+and\\s+reseller|reseller\\s+and\\s+internet|both channels)$/i;\n\nif (invalidSubcategory.test(String(r.product_subcategory || '').trim())) {\n  r.product_subcategory = '';\n}\nreturn [{json:{...req,...r,forecast_months:r.forecast_months||req.forecast_months,customer_key:r.customer_key||req.customer_key,top_n:r.top_n||req.top_n}}];"
+      },
+      "id": "1f93af72-6e89-4f65-a056-a7c19a9335e8",
+      "name": "Parse Multi-Intent Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "wXxMaXTFYMVggc5H",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/wXxMaXTFYMVggc5H",
+          "cachedResultName": "Jarvis - Sales Forecast and Trend Analysis Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_sales": "={{ $json.run_sales }}",
+            "forecast_months": "={{ $json.forecast_months }}",
+            "message": "=={{ $json.message }}",
+            "sales_task": "={{ $json.sales_task }}",
+            "product_subcategory": "={{ $json.product_subcategory }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_sales",
+              "displayName": "run_sales",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "sales_task",
+              "displayName": "sales_task",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "forecast_months",
+              "displayName": "forecast_months",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            },
+            {
+              "id": "product_subcategory",
+              "displayName": "product_subcategory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "63b77de0-6d40-4d37-9c41-9153014a58e3",
+      "name": "Run Sales Forecast Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "usk9prRQA0M2DcuV",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/usk9prRQA0M2DcuV",
+          "cachedResultName": "Jarvis - Customer Intelligence and Campaign Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "run_customer": "={{ $json.run_customer }}",
+            "customer_key": "={{ $json.customer_key }}",
+            "top_n": "={{ $json.top_n }}",
+            "message": "={{ $json.message }}",
+            "customer_task": "={{ $json.customer_task }}",
+            "customer_actions": "={{ $json.customer_actions }}",
+            "product_subcategory": "={{ $json.product_subcategory }}",
+            "purchase_period": "={{ $json.purchase_period }}",
+            "promotion_category": "={{ $json.promotion_category }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "run_customer",
+              "displayName": "run_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            },
+            {
+              "id": "customer_task",
+              "displayName": "customer_task",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "customer_actions",
+              "displayName": "customer_actions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "array"
+            },
+            {
+              "id": "product_subcategory",
+              "displayName": "product_subcategory",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "purchase_period",
+              "displayName": "purchase_period",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "promotion_category",
+              "displayName": "promotion_category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "customer_key",
+              "displayName": "customer_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            },
+            {
+              "id": "top_n",
+              "displayName": "top_n",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "4b86ac4b-7d44-4a1a-9b4b-ecb2af36ba38",
+      "name": "Run Customer Intelligence Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b74eefe8-2083-4939-8d58-a361afca6a4b",
+      "name": "Merge Specialist Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const outputs=$input.all().map(i=>i.json); const completed=outputs.filter(x=>x.status!=='skipped'); const skipped=outputs.filter(x=>x.status==='skipped').map(x=>x.agent); return [{json:{request:$('Validate Request').first().json.message,execution_mode:completed.length>1?'multi_agent_fan_out':'single_specialist',results:completed,skipped_agents:skipped,human_approval_required:completed.some(x=>x.human_approval_required||(x.email_drafts||[]).length>0)}}];"
+      },
+      "id": "24e94a2d-8920-4037-bc02-26e9525ffde4",
+      "name": "Aggregate Final Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        112
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Embed Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed Request": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Routing Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Routing Context": {
+      "main": [
+        [
+          {
+            "node": "Build Multi-Intent Route Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Multi-Intent Route Request": {
+      "main": [
+        [
+          {
+            "node": "Decompose Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decompose Request": {
+      "main": [
+        [
+          {
+            "node": "Parse Multi-Intent Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Multi-Intent Route": {
+      "main": [
+        [
+          {
+            "node": "Run Sales Forecast Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run Customer Intelligence Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Sales Forecast Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Specialist Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Customer Intelligence Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Specialist Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Specialist Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a53fa8f5-b571-4eb2-82ff-be765e7ff535",
+  "meta": {
+    "instanceId": "e4991bb484873ebfae994b0a095aca13183fd292223d09bda8405c8ef7a179c2"
+  },
+  "nodeGroups": [],
+  "id": "g0rVDODLALInz5CO",
+  "tags": []
+}

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Ask Jarvis — an intelligent supply-chain management agent for forecasting and customer intelligence." />
+  <title>Ask Jarvis | Intelligent SCM Agent</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Ask Jarvis home">
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <span>ASK JARVIS</span>
+    </a>
+    <div class="system-status"><span class="status-dot"></span> SCM intelligence online</div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-image" role="img" aria-label="Global AI-powered supply-chain network"></div>
+      <div class="hero-shade"></div>
+      <div class="hero-content">
+        <p class="eyebrow">SUPPLY CHAIN INTELLIGENCE</p>
+        <h1>Ask Jarvis <span>—</span><br />Your Intelligent SCM Agent</h1>
+        <p class="hero-copy">Insights, grounded forecasts, customer intelligence, and campaign-ready actions.</p>
+        <div class="capabilities" aria-label="Agent capabilities">
+          <span>Revenue forecasting</span>
+          <span>Seasonal trends</span>
+          <span>Customer intelligence</span>
+          <span>Campaign drafting</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="workspace" aria-labelledby="ask-heading">
+      <div class="workspace-heading">
+        <div>
+          <p class="section-kicker">COMMAND CENTER</p>
+          <h2 id="ask-heading">What would you like to know?</h2>
+        </div>
+        <button class="settings-button" id="settingsButton" type="button" aria-expanded="false" aria-controls="connectionPanel">
+          <span aria-hidden="true">⚙</span> Connection
+        </button>
+      </div>
+
+      <div class="connection-panel" id="connectionPanel" hidden>
+        <label for="webhookUrl">n8n webhook URL</label>
+        <div class="url-row">
+          <input id="webhookUrl" type="url" spellcheck="false" value="http://localhost:5678/webhook-test/adventureworks-agent" />
+          <button id="saveUrl" type="button">Save</button>
+        </div>
+        <p>Use <code>/webhook-test/</code> while n8n is listening, or <code>/webhook/</code> after activating the router.</p>
+      </div>
+
+      <form id="jarvisForm" class="query-card">
+        <label for="question" class="sr-only">Question for Jarvis</label>
+        <textarea id="question" name="question" rows="5" required placeholder="Ask about demand, forecasts, customer segments, churn risk, or campaign opportunities…"></textarea>
+        <div class="query-footer">
+          <span id="characterCount">0 / 2,000</span>
+          <button class="primary-button" id="submitButton" type="submit">
+            <span class="button-label">Go Jarvis</span>
+            <span class="button-arrow" aria-hidden="true">→</span>
+          </button>
+        </div>
+      </form>
+
+      <div class="examples">
+        <span>Try an example</span>
+        <button type="button" data-prompt="Forecast Internet and Reseller revenue for the next 6 months and explain seasonal trends.">6-month revenue forecast</button>
+        <button type="button" data-prompt="Forecast Mountain Bikes revenue for the next 3 months. Also identify customers who purchased Mountain Bikes during the last completed quarter and draft a cross-sell email promoting bike accessories.">Forecast + campaign</button>
+      </div>
+    </section>
+
+    <section id="resultSection" class="results-section" aria-live="polite" hidden>
+      <div class="results-heading">
+        <div>
+          <p class="section-kicker">JARVIS RESPONSE</p>
+          <h3>Intelligence brief..All Wrapped up here sir. Will there be anything else?</h3>
+        </div>
+        <button id="copyResult" class="copy-button" type="button">Copy response</button>
+      </div>
+      <div id="resultMeta" class="result-meta"></div>
+      <div id="resultContent" class="result-content"></div>
+    </section>
+  </main>
+
+ <footer>
+    <span>Ask Jarvis</span>
+    <span>Grounded by AdventureWorks DataWarehouse ·n8n · SQL Server · Pinecone · OpenAI</span>
+  </footer>
+
+  <template id="loadingTemplate">
+    <div class="loading-card">
+      <div class="jarvis-orbit"><span></span><span></span><span></span></div>
+      <div><strong>Jarvis is analyzing your request</strong><p>Routing tasks and consulting grounded business context…</p></div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

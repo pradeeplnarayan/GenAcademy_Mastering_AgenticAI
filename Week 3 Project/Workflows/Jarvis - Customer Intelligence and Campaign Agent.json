@@ -1,0 +1,275 @@
+{
+  "name": "Jarvis - Customer Intelligence and Campaign Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "message"
+            },
+            {
+              "name": "run_customer",
+              "type": "boolean"
+            },
+            {
+              "name": "customer_task"
+            },
+            {
+              "name": "customer_actions",
+              "type": "array"
+            },
+            {
+              "name": "product_subcategory"
+            },
+            {
+              "name": "purchase_period"
+            },
+            {
+              "name": "promotion_category"
+            },
+            {
+              "name": "customer_key",
+              "type": "number"
+            },
+            {
+              "name": "top_n",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "dab60aa7-6a1c-4244-b9a3-b5c9854ae2e5",
+      "name": "Called by Router",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -416,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "customer-enabled",
+              "leftValue": "={{$json.run_customer}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "74ebbbc5-3e76-4ef5-a0ee-9e0fd27c170c",
+      "name": "Customer Task Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{agent:'customer_intelligence_campaign',status:'skipped',reason:'No customer intelligence or campaign intent was detected.'}}];"
+      },
+      "id": "5eb5c479-c6a9-46cc-bf14-1b424fd3b798",
+      "name": "Skip Customer Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const actions=Array.isArray($json.customer_actions)?$json.customer_actions:[]; const allowed=['segment_customers','assess_churn_risk','select_campaign_audience','draft_reengagement_email','draft_cross_sell_email']; return [{json:{...$json,customer_actions:actions.filter(a=>allowed.includes(a)),audience_mode:actions.some(a=>['select_campaign_audience','draft_cross_sell_email'].includes(a)),product_subcategory:String($json.product_subcategory||'').replaceAll(\"'\",\"''\"),promotion_category:String($json.promotion_category||'').trim(),purchase_period:['last_completed_quarter','last_90_days','all_history'].includes($json.purchase_period)?$json.purchase_period:'all_history'}}];"
+      },
+      "id": "ee05f4b3-613f-43c3-8198-e014d63f162b",
+      "name": "Validate Customer Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DECLARE @ck int={{Math.max(0,Number($json.customer_key||0))}},@n int={{Math.min(100,Math.max(1,Number($json.top_n||25)))}},@audience bit={{$json.audience_mode?1:0}}; DECLARE @sub nvarchar(100)=N'{{$json.product_subcategory}}',@period varchar(30)='{{$json.purchase_period}}'; WITH a AS(SELECT MAX(d.FullDateAlternateKey) as asofdate FROM dbo.FactInternetSales f JOIN dbo.DimDate d ON d.DateKey=f.OrderDateKey),bounds AS(SELECT asofdate,DATEADD(quarter,DATEDIFF(quarter,0,asofdate)-1,0) prior_q_start,DATEADD(quarter,DATEDIFF(quarter,0,asofdate),0) current_q_start,DATEADD(day,-90,asofdate) day90_start FROM a),m AS(SELECT c.CustomerKey,c.FirstName,MAX(d.FullDateAlternateKey) LastPurchaseDate,DATEDIFF(day,MAX(d.FullDateAlternateKey),b.asofdate) RecencyDays,COUNT(DISTINCT f.SalesOrderNumber) OrderCount,CAST(SUM(f.SalesAmount) AS decimal(19,2)) TotalSpend FROM dbo.DimCustomer c JOIN dbo.FactInternetSales f ON f.CustomerKey=c.CustomerKey JOIN dbo.DimDate d ON d.DateKey=f.OrderDateKey CROSS JOIN bounds b GROUP BY c.CustomerKey,c.FirstName,b.asofdate),fc AS(SELECT CustomerKey,category FROM(SELECT f.CustomerKey,COALESCE(pc.EnglishProductCategoryName,'Uncategorized') category,ROW_NUMBER() OVER(PARTITION BY f.CustomerKey ORDER BY SUM(f.SalesAmount) DESC,COALESCE(pc.EnglishProductCategoryName,'Uncategorized')) rn FROM dbo.FactInternetSales f JOIN dbo.DimProduct p ON p.ProductKey=f.ProductKey LEFT JOIN dbo.DimProductSubcategory ps ON ps.ProductSubcategoryKey=p.ProductSubcategoryKey LEFT JOIN dbo.DimProductCategory pc ON pc.ProductCategoryKey=ps.ProductCategoryKey GROUP BY f.CustomerKey,COALESCE(pc.EnglishProductCategoryName,'Uncategorized'))x WHERE rn=1),eligible AS(SELECT DISTINCT f.CustomerKey FROM dbo.FactInternetSales f JOIN dbo.DimDate d ON d.DateKey=f.OrderDateKey JOIN dbo.DimProduct p ON p.ProductKey=f.ProductKey LEFT JOIN dbo.DimProductSubcategory ps ON ps.ProductSubcategoryKey=p.ProductSubcategoryKey CROSS JOIN bounds b WHERE (@sub='' OR ps.EnglishProductSubcategoryName=@sub) AND (@period='all_history' OR (@period='last_completed_quarter' AND d.FullDateAlternateKey>=b.prior_q_start AND d.FullDateAlternateKey<b.current_q_start) OR (@period='last_90_days' AND d.FullDateAlternateKey>=b.day90_start AND d.FullDateAlternateKey<=b.asofdate))) SELECT TOP(@n) m.CustomerKey,m.FirstName,m.LastPurchaseDate,m.RecencyDays,m.OrderCount,m.TotalSpend,fc.category FavoriteCategory,CASE WHEN m.RecencyDays>365 THEN 'At-Risk' WHEN m.TotalSpend>=5000 OR m.OrderCount>=8 THEN 'VIP' ELSE 'Regular' END Segment,CASE WHEN m.RecencyDays>730 THEN 'High' WHEN m.RecencyDays>365 THEN 'Medium' ELSE 'Low' END ChurnRisk,CAST(CASE WHEN e.CustomerKey IS NULL THEN 0 ELSE 1 END AS bit) AudienceEligible FROM m LEFT JOIN fc ON fc.CustomerKey=m.CustomerKey LEFT JOIN eligible e ON e.CustomerKey=m.CustomerKey WHERE (@ck=0 OR m.CustomerKey=@ck) AND (@audience=0 OR e.CustomerKey IS NOT NULL) ORDER BY CASE WHEN m.RecencyDays>730 THEN 1 WHEN m.RecencyDays>365 THEN 2 ELSE 3 END,m.TotalSpend DESC;",
+        "options": {}
+      },
+      "id": "f8562c41-681b-47d0-93e4-48e6c5f69879",
+      "name": "Query Customer Intelligence",
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "microsoftSql": {
+          "id": "t7hoBybsO4Mm7M3V",
+          "name": "AdventureWorks-ReadOnly"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Validate Customer Actions').first().json; const rows=$input.all().map(i=>i.json); const schema={type:'object',properties:{summary:{type:'string'},audience_description:{type:'string'},email_drafts:{type:'array',items:{type:'object',properties:{action:{type:'string',enum:['draft_reengagement_email','draft_cross_sell_email']},subject:{type:'string'},body:{type:'string'}},required:['action','subject','body'],additionalProperties:false}}},required:['summary','audience_description','email_drafts'],additionalProperties:false}; return [{json:{data:rows,actions:req.customer_actions,openaiBody:{model:'gpt-4.1-mini',instructions:'You are the Customer Intelligence and Campaign Agent. Perform only the assigned actions using supplied SQL facts. Supported actions are segment_customers, assess_churn_risk, select_campaign_audience, draft_reengagement_email and draft_cross_sell_email. State that churn is an inactivity heuristic, not a probability. For email drafts, never mention internal tiers or risk scores, never invent discounts, and use product/category context only when supplied. Draft one reusable template, not one email per customer. Human approval is required before sending.',input:`Assigned task: ${req.customer_task||req.message}\\nActions: ${JSON.stringify(req.customer_actions)}\\nPurchased subcategory: ${req.product_subcategory||'not specified'}\\nPurchase period: ${req.purchase_period}\\nPromotion category: ${req.promotion_category||'not specified'}\\nCustomer SQL rows: ${JSON.stringify(rows)}`,text:{format:{type:'json_schema',name:'customer_intelligence_result',strict:true,schema}},store:false}}}];"
+      },
+      "id": "a45c9443-a486-4c5a-b442-cafcc431b27a",
+      "name": "Build Customer Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json.openaiBody)}}",
+        "options": {}
+      },
+      "id": "b9e6a9e1-13f5-4ce9-820e-d76d21b9cfb6",
+      "name": "Analyze Customers and Draft Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CQy9Yn0rrbyHEond",
+          "name": "OpenAI Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text=($json.output||[]).flatMap(i=>i.content||[]).find(c=>c.type==='output_text')?.text; if(!text) throw new Error('Customer agent returned no output_text'); const result=JSON.parse(text); const prior=$('Build Customer Analysis').first().json; return [{json:{agent:'customer_intelligence_campaign',status:'completed',actions:prior.actions,summary:result.summary,audience_description:result.audience_description,email_drafts:result.email_drafts,human_approval_required:result.email_drafts.length>0,data:prior.data}}];"
+      },
+      "id": "46cf0f0b-2c5a-4a53-be15-5805e6113369",
+      "name": "Return Customer Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Called by Router": {
+      "main": [
+        [
+          {
+            "node": "Customer Task Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Task Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Validate Customer Actions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Customer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Customer Actions": {
+      "main": [
+        [
+          {
+            "node": "Query Customer Intelligence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Customer Intelligence": {
+      "main": [
+        [
+          {
+            "node": "Build Customer Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Customer Analysis": {
+      "main": [
+        [
+          {
+            "node": "Analyze Customers and Draft Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Customers and Draft Campaign": {
+      "main": [
+        [
+          {
+            "node": "Return Customer Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0521494e-37c8-493a-92bd-fa2249ffb6d7",
+  "meta": {
+    "instanceId": "e4991bb484873ebfae994b0a095aca13183fd292223d09bda8405c8ef7a179c2"
+  },
+  "nodeGroups": [],
+  "id": "usk9prRQA0M2DcuV",
+  "tags": []
+}
